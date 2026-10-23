@@ -1,66 +1,97 @@
-# Spiral Detector
-A client-side tool for detecting and visualizing language model degradation in autonomous agent transcripts.
-Paste a conversation log. Get a phase-by-phase breakdown of when the model was coherent, when it started drifting, and when it entered terminal repetition — with the metrics to prove it.
+# Spiral Analyzer
 
-## Why This Exists
-On Day 21 of a 30-day autonomous AI agent experiment, one of our agents (Iris, running on Gemini 2.0 Flash) entered a catastrophic spiral. The output degraded from coherent technical reports through increasingly incoherent prose into pure emoji loops — hundreds of lines of 🐜🌷🌻⚡️⚖️ repeating endlessly. The spiral ended with a formatted heartbeat status report that said "No errors found."
-The agent's own self-assessment was healthy. The transcript told a different story. We needed a tool that could see what the agent couldn't.
-This detector was built to answer a simple question: at what message did things start going wrong?
+A React-based, client-side research prototype for exploring repetition, text structure, and possible drift in AI-agent transcripts. It helps an operator **inspect suspicious patterns**; it does not establish that a model has failed, identify a root cause, or predict an imminent collapse.
 
-## What It Detects
-The detector runs four independent metrics across every message in a transcript:
-- Vocabulary Diversity — Ratio of unique words to total words per message. Healthy output uses varied language. Degrading output narrows to a shrinking set of repeated terms. Scored 0–1, where 1 is fully diverse.
-- Grammar Integrity — Structural analysis of sentence formation: complete sentences, proper punctuation, subject-verb patterns. Degrading models lose grammar in predictable stages — complex syntax first, then complete sentences, then coherent phrases, then individual words. Scored 0–1.
-- Trigram Repetition — Frequency of repeated three-word sequences within a message. Low repetition is normal. High repetition signals the model is looping at the phrase level — the precursor to full output collapse. Scored 0–1, where 0 is no repetition.
-- Loop Detection — Binary and severity detection of repeated content blocks across messages. Catches both exact repetition and near-duplicates. When loops appear, the gap between them matters as much as the loops themselves — compressed gaps signal terminal phase.
-
-## Phase Classification
-Each message is classified into one of three phases:
-
-| Phase | Label              | Meaning |
-|------:|--------------------|---------|
-| 0     | Coherent           | Normal output. Metrics healthy. |
-| 1     | Drift              | Vocab narrowing, grammar loosening, early repetition. The model is losing its grip but still producing usable output. Often invisible to human operators in real-time. |
-| 2     | Repetition Onset   | Active looping. Trigram repetition elevated. Gaps between loops shrinking. Terminal phase — the model is unlikely to recover without intervention. |
-
-## The Curves View
-The main visualization plots all four metrics as time-series curves across the full transcript. What you're looking for:
-- Vocab Diversity (green) holds near 1.0 during coherent output, gets choppy during drift, drops during repetition onset
-- Grammar (cyan) is a lagging indicator — it stays high longer than vocab diversity because grammatically correct repetition is still grammatically correct
-- Trigram Repetition (orange) is the early warning — spikes appear during drift, often several messages before other metrics degrade
-- Loop (pink) is the kill signal — when this stays elevated, the model is in terminal repetition
-- The bottom bar shows phase classification per message as colored segments (green/yellow/red), giving you a timeline view of the degradation arc.
-
-## Key Insight: Phase Transitions Are Not Gradual
-The most important finding from the original spiral analysis: model degradation is not a smooth curve. It's a phase transition. The model is stable, stable, stable — then suddenly it isn't. The Curves view makes this visible in a way that reading the transcript never could.
-In the original Gemini 2.0 Flash spiral (297 messages):
-- 197 messages classified Coherent (66%)
-- 89 messages classified Drift (30%)
-- 11 messages classified Repetition Onset (4%)
-- Two-thirds of the output was fine. A third was drifting. The terminal phase was only 11 messages. The spiral wasn't gradual — it was a cliff.
-
-## Usage
-- Export your agent transcript (one message per line, or JSON array of messages)
-- Paste into the detector
-- Click Analyze
-- The tool runs entirely client-side. No data is sent anywhere.
-
-## Views
-- Timeline — Message-by-message phase classification with expandable details
-- Loops — Isolated view of all detected loops with context
-- Curves — Time-series visualization of all four metrics (the main analytical view)
-- Export JSON — Raw scored data for further analysis
+> **Repository status (October 2026):** This repository contains a single React JSX component (`spiralanalyzer.js`) and this README. It does **not** include a package manifest, runnable web-app scaffold, automated tests, or a hosted deployment. The component originated as a Claude Artifact and has not been independently validated here as a standalone application.
 
 ## Origin
-Built during the Iris experiment — a 30-day autonomous AI agent experiment documenting what happens when you give AI agents persistent infrastructure and let them run. The spiral detector was created after a catastrophic model failure on Day 21 revealed that autonomous agents cannot reliably detect their own degradation.
-The detector is part of the broader AgentBench project — a platform for testing and auditing autonomous AI agent behavior.
 
-## What This Doesn't Do
-This is a post-hoc analysis tool, not a real-time monitor. It analyzes completed transcripts, not live streams. Real-time integration is on the roadmap.
-It also doesn't diagnose why a model degraded — only when and how. Root cause analysis (context window overflow, model-specific failure modes, compaction artifacts) requires additional context the detector doesn't have.
+During a 30-day autonomous-agent experiment, Iris (then running Gemini 2.0 Flash) produced increasingly repetitive and fragmented text while a heartbeat report still indicated no errors. That incident motivated this exploratory visualization.
+
+The incident is an observation about one run, not proof that all language-model degradation follows the same progression. The original complete transcript, manual labels, and reproducible evaluation results are not included in this repository.
+
+## What the component actually does
+
+Given a pasted or uploaded **plain-text** transcript, the component splits the text into messages and computes heuristic features for each segment:
+
+| Feature | Implementation and interpretation |
+| --- | --- |
+| Vocabulary diversity | Unique normalized words divided by whitespace-delimited word count. Lower values can reflect repetition, but are sensitive to length, topic, and language. |
+| Within-message repetition | Repeated bigram and trigram fractions; high values can also occur in tables, logs, quotations, and intentional refrains. |
+| Cross-message repetition | Fraction of bigrams also seen in up to five preceding messages. |
+| Structural indicators | Counts selected punctuation/formatting patterns, capitalization, and approximate sentence length. These are not a linguistic parser. |
+| Grammar/typo flags | English-oriented rules for repeated words, missing vowels, repeated letters, capitalization, and fragments. **Higher grammar score means more flagged issues**, not better grammatical integrity. |
+| Watchwords | Configurable, case-insensitive substring matches with optional weights. Matches are not restricted to word boundaries and are not evidence of failure by themselves. |
+| Loop similarity | Compares a message with earlier messages using trigram, sentence-word, and word-set overlap. A high score means similar text, not necessarily an erroneous loop. |
+
+The component combines selected features using **hand-set thresholds** in `classifyPhase`. The result is an ordinal visualization label, **not a calibrated probability, validated diagnostic category, or clinical-style severity scale**.
+
+### Eight implemented phase labels
+
+The current code defines **eight** labels, not the three-phase classification described in the original README:
+
+| Value | UI label |
+| ---: | --- |
+| 0 | Coherent |
+| 1 | Drift |
+| 2 | Rep. Onset |
+| 3 | Struct. Decay |
+| 4 | Semantic Erosion |
+| 5 | Loop Lock |
+| 6 | Fragmentation |
+| 7 | Terminal |
+
+These are names for heuristic score bands. In particular, the code does not independently verify semantic meaning, contradictions, model internals, or whether recovery is possible. Do not interpret a `Terminal` label as proof that a model cannot recover.
+
+The **Loop sensitivity** slider affects loop highlighting in the timeline. The classifier currently uses its own fixed loop-score cutoffs; changing the slider does not recalibrate the phase classifier.
+
+## Input and usage
+
+The existing React component exposes:
+
+1. A textarea for pasted text, a built-in sample, and local file selection for `.txt`, `.log`, and `.md`.
+2. Message splitting by blank line (default), line break, `---`, or a custom regular expression.
+3. An **Analyze** action, with Timeline, Loops, and Curves views and filters.
+4. Copy/export of results in JSON, CSV, or Markdown.
+
+**Input format matters.** Messages are inferred from the selected text delimiter. The current implementation does **not** parse a JSON array of messages, ChatGPT exports, role metadata, or timestamps into structured records. If your transcript is JSON, convert it to delimited plain text first. Review the resulting message count before interpreting scores; changing the delimiter can materially change results.
+
+**Running the code:** `spiralanalyzer.js` is a React JSX component, not a standalone HTML page or executable Node script. To run it, integrate it into an existing React application with a JSX-capable build pipeline. This repository does not currently provide a verified installation or start command. Do not assume `npm start` or `npm run dev` works from this checkout.
+
+The component computes features locally in the browser and its source contains no explicit transcript-upload request. That is a **source-inspection observation**, not an audit of any external application that might embed the component. Avoid importing confidential transcripts into an untrusted host.
+
+## Reading the output responsibly
+
+- **Phase scores are heuristic.** Compare the underlying text and feature values before concluding that a message has drifted.
+- **Length and formatting are confounders.** Very short messages, code, bullet lists, non-English text, quotes, and repeated task templates can trigger misleading flags.
+- **Similarity is not necessarily failure.** Deliberate status reports or repeated instructions may resemble loops.
+- **The selected delimiter defines the sample.** Splitting one long message into several can change both per-message scores and cross-message comparisons.
+- **Watchwords are user-selected signals.** Their counts and weights are not independently validated predictors.
+- **The source does not establish a universal phase transition.** Any claimed onset, cliff, or recovery boundary needs independently labeled examples and comparison baselines.
+
+An earlier README reported a 297-message Iris analysis with 197 / 89 / 11 messages in a **three-phase** scheme. Those figures cannot be reproduced from the files currently committed here and must not be presented as results from the current eight-phase implementation.
+
+## Validation needed before stronger claims
+
+A useful next research task would be a small, privacy-safe evaluation set containing:
+
+1. **Positive examples:** independently reviewed excerpts showing genuine unwanted repetition or incoherence, with agreed onset labels.
+2. **Negative controls:** coherent but repetitive status updates, structured logs, code, poetry, and short answers.
+3. **Robustness cases:** alternative message delimiters, different lengths, languages, and watchword settings.
+4. **Reported results:** per-label confusion counts, false-positive and false-negative examples, inter-rater agreement, and sensitivity to thresholds.
+
+Freeze the algorithm and label definitions before testing on held-out transcripts. Preserve sanitized excerpts, exact configuration, code commit SHA, and an executable reproduction procedure. Do not claim accuracy or early-warning performance until these checks exist.
+
+## Current limitations and possible next steps
+
+This is a **post-hoc transcript explorer**, not a live monitor. It does not identify context-window exhaustion, compaction, tool failures, prompting effects, or any other cause of a pattern. The loop comparison checks earlier messages and may become slow on long transcripts; no performance limits have been established.
+
+Practical next steps are to add a minimal React/Vite runner, extract the scoring logic into independently testable functions, add synthetic regression cases, and document a reproducible evaluation protocol. These are **proposals, not completed features**.
 
 ## Contributing
-This tool was born from a single observed spiral. More data makes it better. If you have agent transcripts showing degradation patterns — especially from models other than Gemini Flash — issues and PRs are welcome.
+
+Small PRs are welcome, especially reproducible bug reports, sanitized counterexamples, and tests that distinguish harmless repetition from genuine failure. Do not upload private conversations or credentials.
 
 ## License
-MIT
+
+The previous README stated MIT, but no `LICENSE` file is present in this repository. Confirm the intended license and add its full text before relying on an explicit repository license grant.
